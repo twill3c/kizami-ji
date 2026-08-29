@@ -95,6 +95,22 @@ def infer_test_command(root: Path) -> str | None:
     return None
 
 
+def infer_setup_command(root: Path) -> str | None:
+    """依存の導入コマンドを推定する(WT-02e)。
+
+    新しい worktree には node_modules も vendor も無い。入れずにテストを回すと、
+    実行系が起動できず**偽の赤ベースライン**になる —— それを本物の赤と見分けられないことが
+    HC-063 の本体だった。入れられるものは入れてから測る。
+    """
+    if (root / "package-lock.json").exists():
+        return "npm ci"
+    if (root / "package.json").exists():
+        return "npm install"
+    if (root / "Gemfile").exists():
+        return "bundle install"
+    return None
+
+
 def infer_base_branch(root: Path) -> str | None:
     """既定ブランチを git から読む。origin/HEAD → main → master → 現在のブランチ。"""
     head = git(["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], cwd=root, check=False).strip()
@@ -107,12 +123,45 @@ def infer_base_branch(root: Path) -> str | None:
     return git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=root, check=False).strip() or None
 
 
+def rmdir_if_empty(path: Path, attempts: int = 5) -> bool:
+    """空ディレクトリを畳む。Windows では直後に失敗するので少し待って試し直す。
+
+    `git worktree remove` の直後はハンドルが残っていて `rmdir` が拒否される。
+    一度きりの試行で握り潰すと、空のディレクトリが静かに積み上がる。
+    """
+    for i in range(attempts):
+        try:
+            if not path.is_dir():
+                return True
+            if any(path.iterdir()):
+                return False
+            path.rmdir()
+            return True
+        except OSError:
+            time.sleep(0.1 * (i + 1))
+    return False
+
+
+def branch_exists(root: Path, name: str) -> bool:
+    return bool(git(["rev-parse", "--verify", "--quiet", name], cwd=root, check=False).strip())
+
+
 def resolve_config(root: Path, cfg: dict) -> dict:
-    """空欄を実物から埋める。埋まらなければその場で落とす(黙って誤った既定に落ちない)。"""
+    """空欄を実物から埋める。埋まらなければその場で落とす(黙って誤った既定に落ちない)。
+
+    **空欄だけでなく「書いてあるが誤っている」も拾う。** 誤配された既定値は空欄ではないので、
+    空欄だけを見ていると届かない —— 雛形が `main` を配ったが HEAD が `master` の
+    プロジェクトが実測 10 件あった(HC-063)。
+    """
     if not cfg.get("test_command"):
         cfg["test_command"] = infer_test_command(root)
     if not cfg.get("base_branch"):
         cfg["base_branch"] = infer_base_branch(root)
+    elif not branch_exists(root, cfg["base_branch"]):
+        guess = infer_base_branch(root)
+        print(f'  ⚠ .wt/gate.json の base_branch "{cfg["base_branch"]}" は存在しません。'
+              f'"{guess}" で進めます(gate.json を直してください)')
+        cfg["base_branch"] = guess
     if not cfg.get("test_command"):
         raise SystemExit(
             'test_command を決められません。.wt/gate.json の "test_command" に、'
@@ -143,13 +192,26 @@ LAUNCH_FAILURE = [
 ]
 
 
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def strip_ansi(text: str) -> str:
+    """色付けの制御コードを落とす。
+
+    落とさないと、vitest の `\\x1b[32m20 passed` のように**数字の直前が単語文字になり**、
+    `\\b\\d+` が一致しない。実際に「20 passed」と出ているのに証跡なしと判定した
+    (合成フィクスチャでは再現しない —— 素の文字列には制御コードが無いため)。
+    """
+    return ANSI.sub("", text)
+
+
 def judge_ran(cmd: str, r: subprocess.CompletedProcess) -> tuple[bool, str]:
     """テストが実際に走ったか。走っていなければ理由を返す(WT-02a / HC-063)。
 
     **「実行できなかった」と「失敗が無かった」を同じ顔で報告しない**ことが、この関数の全部である。
     終了コードだけを信じない —— 何も実行せずに 0 を返す経路が実在する。
     """
-    out = f"{r.stdout}\n{r.stderr}"
+    out = strip_ansi(f"{r.stdout}\n{r.stderr}")
     low = out.lower()
     for phrase in LAUNCH_FAILURE:
         if phrase in low:
@@ -208,6 +270,10 @@ def cmd_open(args) -> int:
     print(f"worktree 作成: {path}(ブランチ {branch} ← {base})")
 
     setup = cfg.get("setup_command")
+    if not setup:
+        setup = infer_setup_command(path)
+        if setup:
+            print(f'  setup_command が空なので "{setup}" と見なします(.wt/gate.json で上書きできます)')
     if setup:
         # WT-02e: 依存インストール等をベースライン測定より前に実行する。
         # これを行わないと Node 等のプロジェクトでは常に偽の赤ベースラインになる(HC-001)
@@ -238,6 +304,8 @@ def cmd_open(args) -> int:
         print("    (実行系が件数を報告しない場合に限り \"assume_ran\": true で先へ進めます)")
         git(["worktree", "remove", "--force", str(path)], cwd=root, check=False)
         git(["branch", "-D", branch], cwd=root, check=False)
+        for leftover in (path, path.parent):
+            rmdir_if_empty(leftover)
         print(f"    作りかけの worktree とブランチ {branch} は破棄しました")
         return 1
 
@@ -497,6 +565,8 @@ def cmd_close(args) -> int:
         print(f"   (Windows のファイルロック等)。手動で削除してください: {path}")
         print(f"閉鎖(ディレクトリ残存): {branch}({path})")
         return 0
+    # 最後の worktree を閉じたら、親の *.worktrees も空なら畳む
+    rmdir_if_empty(path.parent)
     print(f"閉鎖: {branch}({path})")
     return 0
 

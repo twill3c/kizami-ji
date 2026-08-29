@@ -6,3 +6,5 @@ __pycache__/
 .venv/
 .DS_Store
 data/build/
+public/dict/
+tsconfig.tsbuildinfo
