@@ -28,8 +28,11 @@ JST = dt.timezone(dt.timedelta(hours=9))
 BASELINE_FILE = ".wt-baseline.json"
 
 DEFAULT_CONFIG = {
-    "base_branch": "main",
-    "test_command": "python -m pytest -q --tb=no",
+    # 既定は空にする。**誤った既定は空欄より悪い** —— pytest 固定の既定を配ったために、
+    # TS / R / Rust のプロジェクトで「テストが 1 件も走らないのにベースライン赤」が
+    # 通っていた(HC-063)。空なら infer_* が実物から埋める。
+    "base_branch": None,
+    "test_command": None,
     "setup_command": None,
     "gate": {
         "max_total_lines": 500,
@@ -74,15 +77,111 @@ def load_config(root: Path) -> dict:
     return cfg
 
 
-def run_tests(cmd: str, cwd: Path) -> dict:
-    """テストを実行し、緑/赤と失敗テスト ID(pytest の場合)を返す。"""
+def infer_test_command(root: Path) -> str | None:
+    """プロジェクトの実物からテストコマンドを推定する。推定できなければ None。"""
+    pkg = root / "package.json"
+    if pkg.exists():
+        try:
+            if "test" in (json.loads(pkg.read_text(encoding="utf-8")).get("scripts") or {}):
+                return "npm test"
+        except (json.JSONDecodeError, OSError):
+            pass
+    if (root / "Cargo.toml").exists():
+        return "cargo test"
+    if any((root / n).exists() for n in ("pyproject.toml", "requirements.txt", "setup.py")):
+        return "python -m pytest -q --tb=no"
+    if list(root.glob("tests/*.py")) or list(root.glob("test_*.py")):
+        return "python -m pytest -q --tb=no"
+    return None
+
+
+def infer_base_branch(root: Path) -> str | None:
+    """既定ブランチを git から読む。origin/HEAD → main → master → 現在のブランチ。"""
+    head = git(["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], cwd=root, check=False).strip()
+    prefix = "refs/remotes/origin/"
+    if head.startswith(prefix):
+        return head[len(prefix):]
+    for name in ("main", "master"):
+        if git(["rev-parse", "--verify", "--quiet", name], cwd=root, check=False).strip():
+            return name
+    return git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=root, check=False).strip() or None
+
+
+def resolve_config(root: Path, cfg: dict) -> dict:
+    """空欄を実物から埋める。埋まらなければその場で落とす(黙って誤った既定に落ちない)。"""
+    if not cfg.get("test_command"):
+        cfg["test_command"] = infer_test_command(root)
+    if not cfg.get("base_branch"):
+        cfg["base_branch"] = infer_base_branch(root)
+    if not cfg.get("test_command"):
+        raise SystemExit(
+            'test_command を決められません。.wt/gate.json の "test_command" に、'
+            "このプロジェクトのテストを走らせるコマンドを書いてください(WT-02a / HC-063)"
+        )
+    if not cfg.get("base_branch"):
+        raise SystemExit('base_branch を決められません。.wt/gate.json の "base_branch" に書いてください')
+    return cfg
+
+
+# テストが「実際に走った」ことの証跡。件数を報告しない実行系は、走ったと見なさない。
+RAN_EVIDENCE = [
+    r"\b\d+\s+(?:passed|failed|error|errors|skipped)\b",       # pytest / vitest / jest
+    r"Tests?\s+\d+",                                            # vitest の要約行
+    r"test result:\s*(?:ok|FAILED)",                            # cargo test
+    r"\b\d+\s+(?:tests?|examples?),\s*\d+\s+(?:failures?|assertions?)",  # rspec / minitest
+]
+# 「走らなかった」と出力自身が言っている
+NOT_RAN_PHRASES = [
+    "no tests ran", "no tests were found", "no test files found",
+    "no tests found", "missing script", "no test specified",
+]
+# 実行系そのものが起動できていない
+LAUNCH_FAILURE = [
+    "command not found", "not recognized as an internal", "は、内部コマンド",
+    "no such file or directory", "cannot find module",
+    "this is not the tsc command",  # npx が未導入コマンドを拾うと終了コード 0 で返る
+]
+
+
+def judge_ran(cmd: str, r: subprocess.CompletedProcess) -> tuple[bool, str]:
+    """テストが実際に走ったか。走っていなければ理由を返す(WT-02a / HC-063)。
+
+    **「実行できなかった」と「失敗が無かった」を同じ顔で報告しない**ことが、この関数の全部である。
+    終了コードだけを信じない —— 何も実行せずに 0 を返す経路が実在する。
+    """
+    out = f"{r.stdout}\n{r.stderr}"
+    low = out.lower()
+    for phrase in LAUNCH_FAILURE:
+        if phrase in low:
+            return False, f"実行系を起動できていない({phrase})"
+    for phrase in NOT_RAN_PHRASES:
+        if phrase in low:
+            return False, f"テストが 1 件も走っていない({phrase})"
+    if r.returncode == 5 and "pytest" in cmd:
+        return False, "pytest 終了コード 5 — 収集されたテストが 0 件"
+    if r.returncode == 127:
+        return False, "終了コード 127 — コマンドが見つからない"
+    if not any(re.search(p, out) for p in RAN_EVIDENCE) and r.returncode == 0:
+        return False, "成功を返しているが、実行件数の証跡が出力に無い"
+    return True, ""
+
+
+def run_tests(cmd: str, cwd: Path, assume_ran: bool = False) -> dict:
+    """テストを実行し、走ったか / 緑赤 / 失敗テスト ID(pytest の場合)を返す。"""
     r = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True)
     failed_ids = sorted(set(re.findall(r"^FAILED\s+(\S+)", r.stdout, re.MULTILINE)))
     tail = "\n".join((r.stdout.strip().splitlines() or [""])[-3:])
+    ran, why = judge_ran(cmd, r)
+    if assume_ran and not ran:
+        # 緩める側だけを置かない。使うたびに大声で言う(AGENTS.md 品質ゲート)
+        print(f"  ⚠ assume_ran により「走った」と見なしています。本来の判定: {why}")
+        ran, why = True, ""
     return {
         "command": cmd,
         "returncode": r.returncode,
-        "green": r.returncode == 0,
+        "ran": ran,
+        "not_ran_reason": why,
+        "green": ran and r.returncode == 0,
         "failed_ids": failed_ids,
         "summary": tail,
         "ts": dt.datetime.now(JST).isoformat(timespec="seconds"),
@@ -97,7 +196,7 @@ def worktrees_dir(root: Path) -> Path:
 
 def cmd_open(args) -> int:
     root = repo_root()
-    cfg = load_config(root)
+    cfg = resolve_config(root, load_config(root))
     base = args.base or cfg["base_branch"]
     git(["rev-parse", "--verify", base])  # ベース存在確認
     branch = f"loop/{args.loop}"
@@ -121,10 +220,27 @@ def cmd_open(args) -> int:
                   f"`close --loop {args.loop} --force` で worktree を破棄してください")
             return 1
 
-    print("クリーンベースライン測定中(WT-02a)…")
-    baseline = run_tests(cfg["test_command"], path)
+    print(f"クリーンベースライン測定中(WT-02a): {cfg['test_command']}")
+    baseline = run_tests(cfg["test_command"], path, cfg.get("assume_ran", False))
     baseline["base_branch"] = base
     baseline["base_commit"] = git(["rev-parse", "--short", base], cwd=root).strip()
+
+    if not baseline["ran"]:
+        # WT-02a / HC-063: 実行できなかったことを「赤」として記録してはならない。
+        # 記録すると、以後の check で既存失敗 0 件として扱われ、失敗帰属が全件エージェントに寄る。
+        print(f"  ✗ テストが走っていません: {baseline['not_ran_reason']}")
+        print(f"    コマンド: {cfg['test_command']}")
+        print(f"    出力の末尾: {baseline['summary'] or '(なし)'}")
+        guess = infer_test_command(path)
+        if guess and guess != cfg["test_command"]:
+            print(f'    このプロジェクトの実物からは "{guess}" と見えます')
+        print('    .wt/gate.json の "test_command" を直してから open をやり直してください')
+        print("    (実行系が件数を報告しない場合に限り \"assume_ran\": true で先へ進めます)")
+        git(["worktree", "remove", "--force", str(path)], cwd=root, check=False)
+        git(["branch", "-D", branch], cwd=root, check=False)
+        print(f"    作りかけの worktree とブランチ {branch} は破棄しました")
+        return 1
+
     (path / BASELINE_FILE).write_text(
         json.dumps(baseline, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -220,7 +336,7 @@ def run_gate(root: Path, cfg: dict, base_ref: str) -> tuple[bool, list[str]]:
 
 def cmd_gate(args) -> int:
     root = repo_root()
-    cfg = load_config(root)
+    cfg = resolve_config(root, load_config(root))
     ok, msgs = run_gate(root, cfg, args.base or cfg["base_branch"])
     print("\n".join(msgs))
     return 0 if ok else 1
@@ -230,16 +346,32 @@ def cmd_gate(args) -> int:
 
 def cmd_check(args) -> int:
     root = repo_root()
-    cfg = load_config(root)
+    cfg = resolve_config(root, load_config(root))
     bl_path = root / BASELINE_FILE
     baseline = json.loads(bl_path.read_text(encoding="utf-8")) if bl_path.exists() else None
-    base_ref = (baseline or {}).get("base_branch", cfg["base_branch"])
+    base_ref = (baseline or {}).get("base_branch") or cfg["base_branch"]
+    if baseline is not None and not git(["rev-parse", "--verify", "--quiet", base_ref], cwd=root, check=False).strip():
+        # 並走中に基準ブランチが改名・削除されることがある(HC-063)
+        print(f"  ⚠ ベースラインの基準ブランチ {base_ref} が見つかりません。{cfg['base_branch']} で測ります")
+        base_ref = cfg["base_branch"]
 
     ok, msgs = run_gate(root, cfg, base_ref)
     print("\n".join(msgs))
 
-    print("\nテスト再実行 + 失敗帰属(WT-02c)…")
-    current = run_tests(cfg["test_command"], root)
+    print(f"\nテスト再実行 + 失敗帰属(WT-02c): {cfg['test_command']}")
+    current = run_tests(cfg["test_command"], root, cfg.get("assume_ran", False))
+    if not current["ran"]:
+        # 走っていない実行を「緑」とも「赤」とも報告しない(HC-063)
+        print(f"  ✗ テストが走っていません: {current['not_ran_reason']}")
+        print(f"    出力の末尾: {current['summary'] or '(なし)'}")
+        print("\ncheck: 不合格 — テストを実行できていないため、失敗帰属を判定できません")
+        return 1
+    if baseline is not None and baseline.get("ran") is False:
+        print("  ✗ ベースラインが未実行のまま記録されています。open をやり直してください(HC-063)")
+        return 1
+    if baseline is not None and "ran" not in baseline and not baseline.get("green") and not baseline.get("failed_ids"):
+        # 旧形式。赤なのに失敗 ID が 1 件も無いのは「走っていない」の徴候である
+        print("  ⚠ 旧形式のベースラインが『赤・既存失敗 0 件』です。実行できていなかった可能性があります(HC-063)")
     if baseline is None:
         print("  ⚠ ベースラインなし(wtctl open で作られていない worktree)。全失敗を表示します")
         base_failed: set[str] = set()
