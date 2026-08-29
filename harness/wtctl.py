@@ -88,6 +88,13 @@ def infer_test_command(root: Path) -> str | None:
             pass
     if (root / "Cargo.toml").exists():
         return "cargo test"
+    # Rust を下位ディレクトリに置く構成(フリートでは rust/ や crates/ が実在する)
+    for manifest in sorted(root.glob("*/Cargo.toml")):
+        return f"cargo test --manifest-path {manifest.parent.name}/Cargo.toml"
+    # R + testthat。tests/testthat/ を直接指す —— フリートの R プロジェクトは
+    # tests/*.R の入口を置かない形で揃っている(実測 4 件)
+    if (root / "DESCRIPTION").exists() and (root / "tests" / "testthat").is_dir():
+        return "Rscript -e \"testthat::test_dir('tests/testthat')\""
     if any((root / n).exists() for n in ("pyproject.toml", "requirements.txt", "setup.py")):
         return "python -m pytest -q --tb=no"
     if list(root.glob("tests/*.py")) or list(root.glob("test_*.py")):
