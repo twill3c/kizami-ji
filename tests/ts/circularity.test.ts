@@ -10,7 +10,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// @ts-expect-error 検査器は素の mjs
 import { scanDir, scanSource, FORBIDDEN, FORBIDDEN_PATHS } from "../../build/circularity.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -46,6 +45,20 @@ describe("O-2 循環の禁止", () => {
       ";\n";
     const hits = scanSource(bad, "<positive-control-path>");
     expect(hits.length).toBeGreaterThan(0);
+  });
+
+  it("T-022e 陰性対照 — 辞書の固有名は依存ではない", () => {
+    // mecab-ipadic は閲覧者に見せる文にも NOTICE にも書く。ハイフンで参照実装と分かれる
+    const prose =
+      "export const x = <p>辞書は " +
+      from(109, 101, 99, 97, 98) + "-" + from(105, 112, 97, 100, 105, 99) +
+      " 2.7.0-20070801(392,126 語)。</p>;";
+    expect(scanSource(prose, "<dictionary-name>")).toEqual([]);
+  });
+
+  it("T-022f 陽性対照 — ハイフンが無ければ捕まる", () => {
+    const dep = "const t = new " + from(77, 101, 67, 97, 98) + "();";
+    expect(scanSource(dep, "<bare-identifier>").length).toBeGreaterThan(0);
   });
 
   it("T-022c 陰性対照 — 正当なソースを撃たない", () => {

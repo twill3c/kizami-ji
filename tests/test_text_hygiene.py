@@ -32,13 +32,32 @@ def prose_files():
     return sorted(set(out))
 
 
+def prose_only(text: str, path: str) -> str:
+    """引用・コード片を落として、**地の文**だけにする。
+
+    キリル・ギリシャを**論じている文**は、その文字を引用せざるを得ない ——
+    TEST_SPEC は `Л《エル》` を例として挙げているし、docs も同じ。
+    それを混入と数えると、この検査は「混入について書けない」検査になる。
+    落とすのは引用の印がある部分だけ(コード柵・バッククォート・ソースのコメント)で、
+    地の文に裸で現れるキリルは今までどおり撃つ。
+    """
+    if path.endswith((".ts", ".tsx")):
+        text = re.sub(r"/\*[\s\S]*?\*/", " ", text)
+        text = re.sub(r"(^|[^:])//[^\n]*", r"\1 ", text, flags=re.M)
+        return text
+    text = re.sub(r"```[\s\S]*?```", " ", text)      # コード柵
+    text = re.sub(r"`[^`\n]*`", " ", text)            # バッククォート
+    return text
+
+
 @pytest.mark.validation
 def test_t050_no_cyrillic_in_prose():
     files = prose_files()
     assert len(files) > 5, f"走査対象が {len(files)} 件しか無い ── 検査が働いていない"
     hits = []
     for p in files:
-        for i, line in enumerate(open(p, encoding="utf-8").read().splitlines(), 1):
+        body = prose_only(open(p, encoding="utf-8").read(), p)
+        for i, line in enumerate(body.splitlines(), 1):
             if CYRILLIC.search(line):
                 hits.append((os.path.relpath(p, ROOT), i, line.strip()[:50]))
     assert hits == [], f"キリル文字の混入 {len(hits)} 件: {hits[:3]}"
@@ -48,7 +67,8 @@ def test_t050_no_cyrillic_in_prose():
 def test_t050b_no_unexpected_greek_in_prose():
     hits = []
     for p in prose_files():
-        for i, line in enumerate(open(p, encoding="utf-8").read().splitlines(), 1):
+        body = prose_only(open(p, encoding="utf-8").read(), p)
+        for i, line in enumerate(body.splitlines(), 1):
             for m in GREEK.finditer(line):
                 if m.group() not in ALLOWED_GREEK:
                     hits.append((os.path.relpath(p, ROOT), i, m.group()))
@@ -64,6 +84,15 @@ def test_t051_positive_and_negative_controls():
     omega = "ω"
     assert GREEK.search(omega) and omega not in ALLOWED_GREEK, "許可外ギリシャの陽性対照が働かない"
     assert all(g in ALLOWED_GREEK for g in "δΣαρ"), "許可リストが機能していない"
+
+    # 引用の落とし方が緩すぎないこと ── 地の文に裸で現れたキリルは残る
+    md_bare = "そば" + leak + "の話"
+    assert CYRILLIC.search(prose_only(md_bare, "x.md")), "地の文のキリルまで落としている"
+    # 引用の中は落ちること
+    md_quoted = "例として `" + leak + "` を挙げる"
+    assert not CYRILLIC.search(prose_only(md_quoted, "x.md")), "引用が落ちていない"
+    ts_comment = "// 例として " + leak + " を挙げる\nexport const a = 1;"
+    assert not CYRILLIC.search(prose_only(ts_comment, "x.ts")), "コメントが落ちていない"
 
 
 @pytest.mark.validation

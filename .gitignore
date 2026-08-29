@@ -8,3 +8,4 @@ __pycache__/
 data/build/
 public/dict/
 tsconfig.tsbuildinfo
+build/shots/

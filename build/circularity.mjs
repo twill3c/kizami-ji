@@ -40,7 +40,21 @@ export function scanSource(text, label = "<source>") {
   const lines = stripped.split("\n");
   lines.forEach((line, i) => {
     for (const word of FORBIDDEN) {
-      if (line.includes(word)) hits.push({ file: label, line: i + 1, what: word });
+      /*
+        辞書の**固有名**は依存ではない。`mecab-ipadic 2.7.0-20070801` は閲覧者に見せる文にも、
+        NOTICE にも書く必要がある(BSD 系の条件)。一方、参照実装は `fugashi` `MeCab` `ipadic` と
+        単体で現れる。**ハイフンに接しているかどうか**が両者を分ける。
+      */
+      let from = 0;
+      for (;;) {
+        const at = line.indexOf(word, from);
+        if (at < 0) break;
+        from = at + 1;
+        const before = at > 0 ? line[at - 1] : "";
+        const after = at + word.length < line.length ? line[at + word.length] : "";
+        if (before === "-" || after === "-") continue;
+        hits.push({ file: label, line: i + 1, what: word });
+      }
     }
     const imp = line.match(/(?:from|import|require)\s*\(?\s*["'`]([^"'`]+)["'`]/);
     if (imp) {

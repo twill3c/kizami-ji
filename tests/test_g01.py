@@ -155,25 +155,50 @@ def _forbidden_words():
     ]
 
 
+def _strip_comments(src: str) -> str:
+    """コメントを空白に置き換える。
+
+    「δ を危うさと呼ぶな」と**戒めるコメント**は禁止語の使用ではない。
+    剥がさないと、規範を書いた行がその規範に撃たれる(loop_005 で実際に踏んだ)。
+    """
+    src = re.sub(r"/\*[\s\S]*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group()), src)
+    src = re.sub(r"(^|[^:])//[^\n]*",
+                 lambda m: m.group(1) + " " * (len(m.group()) - len(m.group(1))),
+                 src, flags=re.M)
+    return src
+
+
 @pytest.mark.validation
 def test_t034_shipped_text_does_not_call_delta_dangerous():
     """G-01 が落ちている間、出荷物の本文が δ を「危うさ」と結びつけていないこと(F-32b)。
 
-    走査対象が空でないこと、および検査器が本当に働くことを対で確かめる(HC-041)。
+    見るのは**閲覧者に届く文**。コメントは届かないので剥がす。
+    走査対象が空でないこと、検査器が本当に働くこと、剥がしすぎていないことを対で確かめる。
     """
     files = _shipped_text_files()
     assert files, "走査対象が空 ── 検査が働いていない"
     words = _forbidden_words()
     hits = []
+    scanned = 0
     for p in files:
         try:
             text = open(p, encoding="utf-8").read()
         except UnicodeDecodeError:
             continue
+        scanned += 1
+        body = _strip_comments(text) if p.endswith((".ts", ".tsx")) else text
         for w in words:
-            if w in text:
+            if w in body:
                 hits.append((os.path.relpath(p, ROOT), w))
+    assert scanned > 3, f"読めたファイルが {scanned} 件 ── 検査が働いていない"
     assert hits == [], f"出荷物の本文に禁止語がある(SPEC F-32b): {hits}"
+
+    # 剥がしすぎていないこと ── 画面に出る文字列は残る
+    live = 'const s = "この境界は' + words[0] + 'い";'
+    assert words[0] in _strip_comments(live), "本文の禁止語まで剥がしている"
+    # コメントは剥がれること
+    assert words[0] not in _strip_comments("// " + words[0] + "と呼ばない\n")
+    assert words[0] not in _strip_comments("/* " + words[0] + "と呼ばない */\n")
 
     # 陽性対照 ── 検査器が語を見つけられること
     probe = "この境界は" + words[0] + "い。"
