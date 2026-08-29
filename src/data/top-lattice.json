@@ -1,0 +1,237 @@
+{
+ "text": "の北詰まで",
+ "nodes": [
+  {
+   "id": 0,
+   "start": 0,
+   "end": 3,
+   "surface": "の",
+   "unknown": false
+  },
+  {
+   "id": 1,
+   "start": 0,
+   "end": 3,
+   "surface": "の",
+   "unknown": false
+  },
+  {
+   "id": 2,
+   "start": 0,
+   "end": 3,
+   "surface": "の",
+   "unknown": false
+  },
+  {
+   "id": 3,
+   "start": 0,
+   "end": 3,
+   "surface": "の",
+   "unknown": false
+  },
+  {
+   "id": 4,
+   "start": 0,
+   "end": 3,
+   "surface": "の",
+   "unknown": false
+  },
+  {
+   "id": 5,
+   "start": 3,
+   "end": 6,
+   "surface": "北",
+   "unknown": false
+  },
+  {
+   "id": 6,
+   "start": 3,
+   "end": 6,
+   "surface": "北",
+   "unknown": false
+  },
+  {
+   "id": 7,
+   "start": 3,
+   "end": 6,
+   "surface": "北",
+   "unknown": false
+  },
+  {
+   "id": 8,
+   "start": 3,
+   "end": 6,
+   "surface": "北",
+   "unknown": false
+  },
+  {
+   "id": 9,
+   "start": 3,
+   "end": 9,
+   "surface": "北詰",
+   "unknown": false
+  },
+  {
+   "id": 10,
+   "start": 6,
+   "end": 9,
+   "surface": "詰",
+   "unknown": false
+  },
+  {
+   "id": 11,
+   "start": 6,
+   "end": 9,
+   "surface": "詰",
+   "unknown": false
+  },
+  {
+   "id": 12,
+   "start": 6,
+   "end": 9,
+   "surface": "詰",
+   "unknown": false
+  },
+  {
+   "id": 13,
+   "start": 6,
+   "end": 9,
+   "surface": "詰",
+   "unknown": false
+  },
+  {
+   "id": 14,
+   "start": 6,
+   "end": 12,
+   "surface": "詰ま",
+   "unknown": false
+  },
+  {
+   "id": 15,
+   "start": 6,
+   "end": 12,
+   "surface": "詰ま",
+   "unknown": false
+  },
+  {
+   "id": 16,
+   "start": 9,
+   "end": 12,
+   "surface": "ま",
+   "unknown": false
+  },
+  {
+   "id": 17,
+   "start": 9,
+   "end": 12,
+   "surface": "ま",
+   "unknown": false
+  },
+  {
+   "id": 18,
+   "start": 9,
+   "end": 15,
+   "surface": "まで",
+   "unknown": false
+  },
+  {
+   "id": 19,
+   "start": 12,
+   "end": 15,
+   "surface": "で",
+   "unknown": false
+  },
+  {
+   "id": 20,
+   "start": 12,
+   "end": 15,
+   "surface": "で",
+   "unknown": false
+  },
+  {
+   "id": 21,
+   "start": 12,
+   "end": 15,
+   "surface": "で",
+   "unknown": false
+  },
+  {
+   "id": 22,
+   "start": 12,
+   "end": 15,
+   "surface": "で",
+   "unknown": false
+  },
+  {
+   "id": 23,
+   "start": 12,
+   "end": 15,
+   "surface": "で",
+   "unknown": false
+  },
+  {
+   "id": 24,
+   "start": 12,
+   "end": 15,
+   "surface": "で",
+   "unknown": false
+  },
+  {
+   "id": 25,
+   "start": 12,
+   "end": 15,
+   "surface": "で",
+   "unknown": false
+  },
+  {
+   "id": 26,
+   "start": 12,
+   "end": 15,
+   "surface": "で",
+   "unknown": false
+  },
+  {
+   "id": 27,
+   "start": 12,
+   "end": 15,
+   "surface": "で",
+   "unknown": false
+  }
+ ],
+ "best": [
+  3,
+  5,
+  10,
+  18
+ ],
+ "second": [
+  3,
+  9,
+  18
+ ],
+ "boundaries": [
+  {
+   "at": 3,
+   "charAt": 1,
+   "delta": null
+  },
+  {
+   "at": 6,
+   "charAt": 2,
+   "delta": 0
+  },
+  {
+   "at": 9,
+   "charAt": 3,
+   "delta": 9160
+  }
+ ],
+ "nodeCount": 28,
+ "cost": 12965,
+ "words": [
+  "の",
+  "北",
+  "詰",
+  "まで"
+ ]
+}

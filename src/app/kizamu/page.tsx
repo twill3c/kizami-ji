@@ -6,7 +6,10 @@ import LatticeView from "@/components/LatticeView";
 import { EXAMPLES } from "@/data/site";
 import { Analyzer } from "@/lib/analyze";
 import { getDict } from "@/lib/browserDict";
-import { buildLattice, secondPath, INF, type Lattice, type LatticeNode } from "@/lib/lattice";
+import {
+  buildLattice, figureFromLattice, secondPath, INF,
+  type Lattice, type LatticeNode,
+} from "@/lib/lattice";
 
 const MAX_LATTICE_CHARS = 40;
 
@@ -149,7 +152,7 @@ export default function Kizamu() {
               </p>
             ) : (
               <>
-                <LatticeView lattice={lattice} second={second?.nodes ?? null} upto={upto} />
+                <LatticeView figure={figureFromLattice(lattice, second?.nodes ?? null)} upto={upto} />
                 <p className="legend">
                   <span><span className="swatch swatch--ai" />最小経路</span>
                   <span><span className="swatch swatch--shu" />二位の道(分割が異なる最良)</span>

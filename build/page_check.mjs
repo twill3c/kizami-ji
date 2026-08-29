@@ -130,6 +130,36 @@ const footerLinks = await page.locator(".site-footer a").allTextContents();
 if (footerLinks.length !== 5) fail(`フッタのリンクが ${footerLinks.length} 本(規約は 5)`);
 else ok(`フッタ 5 項目: ${footerLinks.join(" / ")}`);
 
+// ---------------------------------------------------------------- 静的な 3 ページ
+//
+// 「刻む」以外のページは辞書を 1 バイトも読まない(F-06 / N-05)。
+// トップの図も、僅差の文の表も、方法と限界の数字も、すべて焼いてある。
+
+for (const [pathname, mustHave] of [
+  ["/", "最小経路"],
+  ["/kinsa/", "完全同点"],
+  ["/houhou/", "交絡"],
+]) {
+  seen.length = 0;
+  await page.goto(`${base}${pathname}`, { waitUntil: "networkidle" });
+  const body = (await page.locator("main").innerText()).replace(/\s+/g, "");
+  if (!body.includes(mustHave)) fail(`${pathname} に「${mustHave}」が出ていない`);
+  else ok(`${pathname} の本文に「${mustHave}」がある(${body.length} 字)`);
+  if (dictBytes() !== 0) fail(`${pathname} が辞書を ${dictBytes()} バイト読んでいる`);
+  else ok(`${pathname} の辞書取得 0 バイト`);
+  const f = foreign();
+  if (f.length > 0) fail(`${pathname} から外部通信 ${f.length} 件`);
+}
+
+// トップの図が焼いたデータどおりに描かれているか(数字だけでなく図の実体を見る)
+await page.goto(`${base}/`, { waitUntil: "networkidle" });
+const topSvg = await page.locator("svg[role=img]").count();
+if (topSvg !== 1) fail(`トップのラティス図が ${topSvg} 枚`);
+else ok("トップにラティス図が 1 枚(辞書なしで描けている)");
+const topLabel = await page.locator("svg[role=img]").getAttribute("aria-label");
+if (!topLabel?.includes("の / 北 / 詰 / まで")) fail(`トップの図の説明が想定外: ${topLabel}`);
+else ok("トップの図の説明が最小経路と一致");
+
 // ---------------------------------------------------------------- 刻む
 
 seen.length = 0;
@@ -177,11 +207,15 @@ else ok("外部への通信 0 件");
 
 // 目視検品用の画面。図が読めるかどうかは自動化しないと決めてある(HC-041)ので、
 // 撮って人が見る。撮影に失敗したら落とす —— 取れていない画面を「撮りました」と言わせない
-const shot = "build/shots/kizamu.png";
-await page.locator("svg[role=img]").scrollIntoViewIfNeeded();
-await page.screenshot({ path: shot, fullPage: true });
-if (!existsSync(shot) || statSync(shot).size < 10_000) fail(`画面を撮れていない: ${shot}`);
-else ok(`画面を撮った ${shot}(${(statSync(shot).size / 1024).toFixed(0)} KB)`);
+for (const [name, pathname] of [
+  ["kizamu", null], ["top", "/"], ["kinsa", "/kinsa/"], ["houhou", "/houhou/"],
+]) {
+  if (pathname !== null) await page.goto(`${base}${pathname}`, { waitUntil: "networkidle" });
+  const shot = `build/shots/${name}.png`;
+  await page.screenshot({ path: shot, fullPage: true });
+  if (!existsSync(shot) || statSync(shot).size < 10_000) fail(`画面を撮れていない: ${shot}`);
+  else ok(`画面を撮った ${shot}(${(statSync(shot).size / 1024).toFixed(0)} KB)`);
+}
 
 await browser.close();
 if (server !== null) server.close();

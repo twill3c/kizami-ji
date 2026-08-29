@@ -281,3 +281,54 @@ export function deltaByChar(l: Lattice): Map<number, number> {
 }
 
 export { Analyzer, codePointAt, charLen };
+
+/* ------------------------------------------------------------------ 図のためのデータ
+
+   図は**辞書を持たない**素のデータだけで描けるようにする。
+   トップページはこれを事前に焼いたものを読むので、辞書を 1 バイトも取らずに済む(F-06)。
+   JSON は Infinity を持てないので、δ = ∞ は null で表す。
+*/
+
+export interface FigureNode {
+  id: number;
+  start: number;
+  end: number;
+  surface: string;
+  unknown: boolean;
+}
+
+export interface FigureBoundary {
+  at: number;
+  charAt: number;
+  /** null は ∞(跨ぐ語が辞書に一つも無い) */
+  delta: number | null;
+}
+
+export interface FigureData {
+  text: string;
+  nodes: FigureNode[];
+  best: number[];
+  second: number[];
+  boundaries: FigureBoundary[];
+  /** まとめる前の候補数 */
+  nodeCount: number;
+  cost: number;
+  words: string[];
+}
+
+export function figureFromLattice(l: Lattice, second: LatticeNode[] | null): FigureData {
+  return {
+    text: l.text,
+    nodes: l.nodes.map((n) => ({
+      id: n.id, start: n.start, end: n.end, surface: n.surface, unknown: n.unknown,
+    })),
+    best: [...l.best],
+    second: (second ?? []).map((n) => n.id),
+    boundaries: l.boundaries.map((b) => ({
+      at: b.at, charAt: b.charAt, delta: b.delta === INF ? null : b.delta,
+    })),
+    nodeCount: l.nodes.length,
+    cost: l.cost,
+    words: l.path.map((n) => n.surface),
+  };
+}

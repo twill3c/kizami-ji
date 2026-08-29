@@ -205,21 +205,22 @@ def _build_lattice(a: "Analyzer", raw: bytes):
     return starts, ends, reachable
 
 
-def delta_local(a: "Analyzer", text: str):
-    """(Result, {境界位置: δ}) を返す。境界位置は本文のバイト位置。"""
+def _solve(a: "Analyzer", text: str):
+    """ラティスを組み、前向き・後ろ向きを埋めて (result, total, spanning) を返す。
+
+    spanning[p] = (p をまたぐノードを含む最良経路のコスト, そのノードの表層)。
+    **ラティスは一度しか組まない。** 二度組むと、片方は fwd/bwd が未計算のまま残る。
+    """
     d = a.d
     raw = text.encode("utf-8")
     n = len(raw)
     starts, ends, _ = _build_lattice(a, raw)
     if not ends[n]:
-        return None, {}
+        return None, None, None, None
 
-    # 前向き: fwd[node] = BOS からこのノードまで(このノードの生起コストを含む)
     for pos in range(n + 1):
         for nd in starts.get(pos, ()):
-            best = INF
-            if pos == 0:
-                best = d.connection(0, nd.token.lc)
+            best = d.connection(0, nd.token.lc) if pos == 0 else INF
             for m in ends[pos]:
                 if m.fwd == INF:
                     continue
@@ -228,20 +229,19 @@ def delta_local(a: "Analyzer", text: str):
                     best = c
             nd.fwd = INF if best == INF else best + nd.token.cost
 
-    # 後ろ向き: bwd[node] = このノードを出てから EOS まで(出る連接を含む)
     for pos in range(n, -1, -1):
         for nd in ends[pos]:
             if nd.e == n:
                 nd.bwd = d.connection(nd.token.rc, 0)
-            else:
-                best = INF
-                for m in starts.get(nd.e, ()):
-                    if m.bwd == INF:
-                        continue
-                    c = d.connection(nd.token.rc, m.token.lc) + m.token.cost + m.bwd
-                    if c < best:
-                        best = c
-                nd.bwd = best
+                continue
+            best = INF
+            for m in starts.get(nd.e, ()):
+                if m.bwd == INF:
+                    continue
+                c = d.connection(nd.token.rc, m.token.lc) + m.token.cost + m.bwd
+                if c < best:
+                    best = c
+            nd.bwd = best
 
     total = min(nd.fwd + nd.bwd for nd in ends[n] if nd.fwd < INF)
     result = a.analyze(text)
@@ -249,7 +249,6 @@ def delta_local(a: "Analyzer", text: str):
         raise AssertionError(f"ラティスの最小コストが analyze と食い違う: {total} != "
                              f"{None if result is None else result.cost}")
 
-    # p をまたぐノードのうち最良のもの
     spanning = {}
     for lst in starts.values():
         for nd in lst:
@@ -259,11 +258,40 @@ def delta_local(a: "Analyzer", text: str):
             for p in range(nd.s + 1, nd.e):
                 if (raw[p] & 0xC0) == 0x80:
                     continue
-                if t < spanning.get(p, INF):
-                    spanning[p] = t
+                cur = spanning.get(p)
+                if cur is None or t < cur[0]:
+                    spanning[p] = (t, raw[nd.s:nd.e].decode("utf-8", "replace"))
+    return result, total, spanning, raw
 
+
+def delta_local(a: "Analyzer", text: str):
+    """(Result, {境界位置: δ}) を返す。境界位置は本文のバイト位置。"""
+    result, total, spanning, _raw = _solve(a, text)
+    if result is None:
+        return None, {}
     deltas = {}
     for nd in result.nodes[:-1]:
-        p = nd.end
-        deltas[p] = spanning.get(p, INF) - total if p in spanning else INF
+        hit = spanning.get(nd.end)
+        deltas[nd.end] = INF if hit is None else hit[0] - total
     return result, deltas
+
+
+def delta_detail(a: "Analyzer", text: str):
+    """delta_local に加えて、各境界を跨ぐ最良ノードの表層も返す。
+
+    「北 / 詰 を一語にすると 北詰」という対を画面に出すために要る。
+    表層は**ラティスから引く**(決め打ちしない — HC-045)。
+    """
+    result, total, spanning, _raw = _solve(a, text)
+    if result is None:
+        return None, {}, {}
+    deltas = {}
+    spans = {}
+    for nd in result.nodes[:-1]:
+        hit = spanning.get(nd.end)
+        if hit is None:
+            deltas[nd.end] = INF
+        else:
+            deltas[nd.end] = hit[0] - total
+            spans[nd.end] = hit[1]
+    return result, deltas, spans

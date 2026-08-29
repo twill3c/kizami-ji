@@ -1,6 +1,7 @@
-"use client";
-
 /**
+ * ラティスの図。素のデータだけで描く純粋な描画なので "use client" を付けない。
+ * トップページ(サーバ側で静的に書き出す)では JS を一切配らずに済む。
+ *
  * ラティスの図。候補ノードを段に並べ、最小経路と二位の道を重ねる。
  *
  * **図に添える文字は、図を描いたのと同じデータから出す**(HC-045)。
@@ -8,8 +9,7 @@
  * δ の値は boundaries から、そのまま引く。
  */
 
-import type { Lattice, LatticeNode } from "@/lib/lattice";
-import { INF } from "@/lib/lattice";
+import type { FigureData } from "@/lib/lattice";
 
 const RH = 30;      // 1 段の高さ
 const PAD_L = 46;   // BOS の分
@@ -17,8 +17,7 @@ const PAD_R = 46;   // EOS の分
 const TOP = 34;     // 本文の帯
 
 export interface Props {
-  lattice: Lattice;
-  second: LatticeNode[] | null;
+  figure: FigureData;
   /** DP の段階表示。この文字位置までのノードだけを濃く描く。null なら全部 */
   upto: number | null;
 }
@@ -38,12 +37,12 @@ function charIndex(text: string): Map<number, number> {
   return m;
 }
 
-export default function LatticeView({ lattice, second, upto }: Props) {
-  const text = lattice.text;
+export default function LatticeView({ figure, upto }: Props) {
+  const text = figure.text;
   const chars = [...text];
   const idx = charIndex(text);
-  const bestIds = new Set(lattice.best);
-  const secondIds = new Set((second ?? []).map((n) => n.id));
+  const bestIds = new Set(figure.best);
+  const secondIds = new Set(figure.second);
 
   /*
     同じ範囲・同じ表層の候補(同表層の別トークン)は**一つの枠にまとめる**。
@@ -61,7 +60,7 @@ export default function LatticeView({ lattice, second, upto }: Props) {
     row: number;
   }
   const bySpan = new Map<string, Span>();
-  for (const nd of lattice.nodes) {
+  for (const nd of figure.nodes) {
     const c0 = idx.get(nd.start);
     const c1 = idx.get(nd.end);
     if (c0 === undefined || c1 === undefined) continue;
@@ -110,7 +109,7 @@ export default function LatticeView({ lattice, second, upto }: Props) {
         width={width}
         height={height}
         role="img"
-        aria-label={`「${text}」のラティス。候補 ${lattice.nodes.length} 個を ${placed.length} 枠にまとめた。最小経路は ${lattice.path.map((n) => n.surface).join(" / ")}`}
+        aria-label={`「${text}」のラティス。候補 ${figure.nodeCount} 個を ${placed.length} 枠にまとめた。最小経路は ${figure.words.join(" / ")}`}
       >
         {/* 文字の帯 */}
         {chars.map((ch, i) => (
@@ -189,7 +188,7 @@ export default function LatticeView({ lattice, second, upto }: Props) {
         })}
 
         {/* 境界ごとの δ */}
-        {lattice.boundaries.map((b) => (
+        {figure.boundaries.map((b) => (
           <text
             key={`b${b.at}`}
             x={x(b.charAt)}
@@ -199,7 +198,7 @@ export default function LatticeView({ lattice, second, upto }: Props) {
             fontSize={9.5}
             fill={b.delta === 0 ? "var(--shu)" : "var(--muted)"}
           >
-            {b.delta === INF ? "∞" : b.delta.toLocaleString("ja-JP")}
+            {b.delta === null ? "∞" : b.delta.toLocaleString("ja-JP")}
           </text>
         ))}
         <text x={4} y={height - 10} fontFamily="var(--mono)" fontSize={9} fill="var(--muted)">δ</text>

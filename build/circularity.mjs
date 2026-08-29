@@ -39,28 +39,31 @@ export function scanSource(text, label = "<source>") {
     .replace(/(^|[^:])\/\/[^\n]*/g, (m, p1) => p1 + " ".repeat(m.length - p1.length));
   const lines = stripped.split("\n");
   lines.forEach((line, i) => {
-    for (const word of FORBIDDEN) {
-      /*
-        辞書の**固有名**は依存ではない。`mecab-ipadic 2.7.0-20070801` は閲覧者に見せる文にも、
-        NOTICE にも書く必要がある(BSD 系の条件)。一方、参照実装は `fugashi` `MeCab` `ipadic` と
-        単体で現れる。**ハイフンに接しているかどうか**が両者を分ける。
-      */
-      let from = 0;
-      for (;;) {
-        const at = line.indexOf(word, from);
-        if (at < 0) break;
-        from = at + 1;
-        const before = at > 0 ? line[at - 1] : "";
-        const after = at + word.length < line.length ? line[at + word.length] : "";
-        if (before === "-" || after === "-") continue;
-        hits.push({ file: label, line: i + 1, what: word });
-      }
-    }
+    /*
+      撃つのは**依存の形**だけにする。名前を出すこと自体は依存ではない ——
+      「この解析器は MeCab と一致している」は読者に告げるべき事実だし、
+      辞書の固有名 `mecab-ipadic 2.7.0-20070801` は NOTICE にも本文にも要る(BSD 系の条件)。
+
+      依存とみなすのは二つ:
+        (a) import / require / from のモジュール指定子に現れる
+        (b) 識別子として使われる(`new MeCab(`・`mecab.parse(`・`ipadic[`)
+      地の文に置かれた名前は撃たない。
+    */
     const imp = line.match(/(?:from|import|require)\s*\(?\s*["'`]([^"'`]+)["'`]/);
     if (imp) {
+      for (const word of FORBIDDEN) {
+        if (imp[1].includes(word)) hits.push({ file: label, line: i + 1, what: word });
+      }
       for (const p of FORBIDDEN_PATHS) {
         if (imp[1].includes(p)) hits.push({ file: label, line: i + 1, what: imp[1] });
       }
+    }
+    for (const word of FORBIDDEN) {
+      const use = new RegExp(
+        `(?:new\\s+|[^\\p{L}\\p{N}_$-]|^)${word}\\s*(?:\\.|\\(|\\[)`,
+        "u",
+      );
+      if (use.test(line)) hits.push({ file: label, line: i + 1, what: word });
     }
   });
   return hits;

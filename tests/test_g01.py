@@ -156,15 +156,22 @@ def _forbidden_words():
 
 
 def _strip_comments(src: str) -> str:
-    """コメントを空白に置き換える。
+    """コメントと**引用**を空白に置き換える。
 
-    「δ を危うさと呼ぶな」と**戒めるコメント**は禁止語の使用ではない。
-    剥がさないと、規範を書いた行がその規範に撃たれる(loop_005 で実際に踏んだ)。
+    落とすのは二種類:
+
+    - コメント。「δ を危うさと呼ぶな」と**戒める**注記は禁止語の使用ではない
+      (剥がさないと、規範を書いた行がその規範に撃たれる — loop_005 で実際に踏んだ)
+    - ``<code>…</code>`` の中身。**捨てた呼び名を引用して「もう使わない」と書く**のは
+      使用ではない。引用と使用を分ける線は、文字種検査・O-2 と同じところに引く
+
+    地の文に裸で現れた禁止語は今までどおり撃つ。
     """
     src = re.sub(r"/\*[\s\S]*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group()), src)
     src = re.sub(r"(^|[^:])//[^\n]*",
                  lambda m: m.group(1) + " " * (len(m.group()) - len(m.group(1))),
                  src, flags=re.M)
+    src = re.sub(r"<code>[\s\S]*?</code>", " ", src)
     return src
 
 
@@ -199,6 +206,11 @@ def test_t034_shipped_text_does_not_call_delta_dangerous():
     # コメントは剥がれること
     assert words[0] not in _strip_comments("// " + words[0] + "と呼ばない\n")
     assert words[0] not in _strip_comments("/* " + words[0] + "と呼ばない */\n")
+    # 引用は剥がれ、地の文は残ること(緩めすぎを止める対)
+    quoted = "<li>当初の <code>「" + words[0] + "い文」</code> という名をやめた</li>"
+    assert words[0] not in _strip_comments(quoted), "引用が剥がれていない"
+    bare = "<li>この境界は" + words[0] + "い</li>"
+    assert words[0] in _strip_comments(bare), "地の文の禁止語まで剥がしている"
 
     # 陽性対照 ── 検査器が語を見つけられること
     probe = "この境界は" + words[0] + "い。"

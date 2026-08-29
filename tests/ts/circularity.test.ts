@@ -56,9 +56,21 @@ describe("O-2 循環の禁止", () => {
     expect(scanSource(prose, "<dictionary-name>")).toEqual([]);
   });
 
-  it("T-022f 陽性対照 — ハイフンが無ければ捕まる", () => {
+  it("T-022f 陽性対照 — 識別子として使えば捕まる", () => {
     const dep = "const t = new " + from(77, 101, 67, 97, 98) + "();";
-    expect(scanSource(dep, "<bare-identifier>").length).toBeGreaterThan(0);
+    expect(scanSource(dep, "<new-expr>").length).toBeGreaterThan(0);
+    const call = from(109, 101, 99, 97, 98) + ".parse(x);";
+    expect(scanSource(call, "<method-call>").length).toBeGreaterThan(0);
+    const req = "const m = require(" + JSON.stringify(from(105, 112, 97, 100, 105, 99)) + ");";
+    expect(scanSource(req, "<require>").length).toBeGreaterThan(0);
+  });
+
+  it("T-022g 陰性対照 — 本文で名前を出すのは依存ではない", () => {
+    // 「MeCab と一致している」は読者に告げるべき事実であって、依存ではない
+    const prose =
+      "export const x = <p>この解析器は " + from(77, 101, 67, 97, 98) +
+      " と 10,000 文で一致している。</p>;";
+    expect(scanSource(prose, "<prose-mention>")).toEqual([]);
   });
 
   it("T-022c 陰性対照 — 正当なソースを撃たない", () => {
@@ -79,7 +91,10 @@ describe("O-2 循環の禁止", () => {
     expect(FORBIDDEN.length).toBeGreaterThan(2);
     expect(FORBIDDEN_PATHS.length).toBeGreaterThan(1);
     for (const w of FORBIDDEN) {
-      expect(scanSource(`const a = ${JSON.stringify(w)};`, "<self>").length).toBeGreaterThan(0);
+      // 依存の形にしたものは必ず捕まえること
+      expect(scanSource(`import x from ${JSON.stringify(w)};`, "<self>").length)
+        .toBeGreaterThan(0);
+      expect(scanSource(`${w}.run();`, "<self-use>").length).toBeGreaterThan(0);
     }
   });
 });
