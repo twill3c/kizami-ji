@@ -161,3 +161,109 @@ if __name__ == "__main__":
         r = a.analyze(s)
         print(f"{r.cost:8d}  " + " / ".join(
             f"{x.surface}({x.pos[0]}{'・未知語' if x.unknown else ''})" for x in r.nodes))
+
+
+# ----------------------------------------------------------------------------
+# δ(局所)— SPEC F-04a / G-01
+#
+# δ_local(p) = (p をまたぐノードを含む最良経路のコスト) − (最小コスト)
+#
+# 0 なら「p で切らなくても同じ値の道がある」。p をまたぐノードが辞書に一つも無ければ ∞
+# (ラティスが強制した境界)。文単位の δ にすると長い文ほど必ず僅差が出て δ が文長の
+# 関数になるため、局所量として定義する(SPEC §4「単位の確定」)。
+
+INF = float("inf")
+
+
+class LatticeNode:
+    __slots__ = ("pos", "s", "e", "token", "unknown", "fwd", "bwd")
+
+    def __init__(self, pos, s, e, token, unknown):
+        self.pos = pos      # ラティス上の開始(直前ノードの終端。空白を含みうる)
+        self.s = s          # 表層の開始
+        self.e = e          # 終端
+        self.token = token
+        self.unknown = unknown
+        self.fwd = INF
+        self.bwd = INF
+
+
+def _build_lattice(a: "Analyzer", raw: bytes):
+    n = len(raw)
+    starts = {}
+    ends = {i: [] for i in range(n + 1)}
+    reachable = [False] * (n + 1)
+    reachable[0] = True
+    for pos in range(n):
+        if not reachable[pos] or (raw[pos] & 0xC0) == 0x80:
+            continue
+        lst = [LatticeNode(pos, s, e, t, u) for (e, s, t, u) in a.candidates(raw, pos)]
+        starts[pos] = lst
+        for nd in lst:
+            ends[nd.e].append(nd)
+            reachable[nd.e] = True
+    return starts, ends, reachable
+
+
+def delta_local(a: "Analyzer", text: str):
+    """(Result, {境界位置: δ}) を返す。境界位置は本文のバイト位置。"""
+    d = a.d
+    raw = text.encode("utf-8")
+    n = len(raw)
+    starts, ends, _ = _build_lattice(a, raw)
+    if not ends[n]:
+        return None, {}
+
+    # 前向き: fwd[node] = BOS からこのノードまで(このノードの生起コストを含む)
+    for pos in range(n + 1):
+        for nd in starts.get(pos, ()):
+            best = INF
+            if pos == 0:
+                best = d.connection(0, nd.token.lc)
+            for m in ends[pos]:
+                if m.fwd == INF:
+                    continue
+                c = m.fwd + d.connection(m.token.rc, nd.token.lc)
+                if c < best:
+                    best = c
+            nd.fwd = INF if best == INF else best + nd.token.cost
+
+    # 後ろ向き: bwd[node] = このノードを出てから EOS まで(出る連接を含む)
+    for pos in range(n, -1, -1):
+        for nd in ends[pos]:
+            if nd.e == n:
+                nd.bwd = d.connection(nd.token.rc, 0)
+            else:
+                best = INF
+                for m in starts.get(nd.e, ()):
+                    if m.bwd == INF:
+                        continue
+                    c = d.connection(nd.token.rc, m.token.lc) + m.token.cost + m.bwd
+                    if c < best:
+                        best = c
+                nd.bwd = best
+
+    total = min(nd.fwd + nd.bwd for nd in ends[n] if nd.fwd < INF)
+    result = a.analyze(text)
+    if result is None or result.cost != total:
+        raise AssertionError(f"ラティスの最小コストが analyze と食い違う: {total} != "
+                             f"{None if result is None else result.cost}")
+
+    # p をまたぐノードのうち最良のもの
+    spanning = {}
+    for lst in starts.values():
+        for nd in lst:
+            if nd.fwd == INF or nd.bwd == INF:
+                continue
+            t = nd.fwd + nd.bwd
+            for p in range(nd.s + 1, nd.e):
+                if (raw[p] & 0xC0) == 0x80:
+                    continue
+                if t < spanning.get(p, INF):
+                    spanning[p] = t
+
+    deltas = {}
+    for nd in result.nodes[:-1]:
+        p = nd.end
+        deltas[p] = spanning.get(p, INF) - total if p in spanning else INF
+    return result, deltas

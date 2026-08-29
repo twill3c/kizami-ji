@@ -1,0 +1,45 @@
+{
+ "meta": {
+  "works": 1500,
+  "ruby_total": 18525,
+  "residual_violations": 0,
+  "sentences": 12157,
+  "span_kind": "bar"
+ },
+ "span_kind": "bar",
+ "primary": {
+  "label": "母集団全体(事前登録)",
+  "n": 400456,
+  "violations": 4203,
+  "violation_rate": 0.010495535089997402,
+  "inf_share": 0.8298314920990071,
+  "q1_rate": 0.014193819046287233,
+  "q4_rate": 0.011896438060610904,
+  "ratio_q1_over_q4": 1.1931150293870696,
+  "spearman_rho": -0.029525774829267187,
+  "empirical_p": 0.0,
+  "shuffles": 2000,
+  "kanji_run_share_q1": 0.22381485106978044,
+  "kanji_run_share_q4": 0.11342070040154224
+ },
+ "kanji_only": {
+  "label": "漢字連続の内部に限る(交絡検査)",
+  "n": 51941,
+  "violations": 3692,
+  "violation_rate": 0.07108064919812865,
+  "inf_share": 0.6257869505785411,
+  "q1_rate": 0.07239122063919907,
+  "q4_rate": 0.08833269156719291,
+  "ratio_q1_over_q4": 0.8195292066259808,
+  "spearman_rho": 0.02679677168524465,
+  "empirical_p": 1.0,
+  "shuffles": 2000,
+  "kanji_run_share_q1": 1.0,
+  "kanji_run_share_q4": 1.0
+ },
+ "threshold": {
+  "ratio": 1.5,
+  "alpha": 0.05,
+  "spearman_sign": "negative"
+ }
+}
