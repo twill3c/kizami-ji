@@ -191,13 +191,13 @@ export default function Kizamu() {
             <div className="scroll">
               <table id="delta-table">
                 <thead>
-                  <tr><th>境界</th><th>直前 / 直後</th><th className="num">δ</th></tr>
+                  <tr><th>境界</th><th className="tight">直前 / 直後</th><th className="num">δ</th></tr>
                 </thead>
                 <tbody>
                   {lattice.boundaries.map((b, i) => (
                     <tr key={b.at}>
                       <td className="num">{b.charAt}</td>
-                      <td>
+                      <td className="tight">
                         {lattice.path[i].surface} ／ {lattice.path[i + 1].surface}
                       </td>
                       <td className="num" style={{ color: b.delta === 0 ? "var(--shu)" : undefined }}>
@@ -226,7 +226,7 @@ export default function Kizamu() {
               <table id="node-table">
                 <thead>
                   <tr>
-                    <th>表層</th><th>品詞</th><th className="num">生起</th>
+                    <th className="tight">表層</th><th className="tight">品詞</th><th className="num">生起</th>
                     <th className="num">左文脈</th><th className="num">右文脈</th>
                     <th className="num">通ったときの総コスト</th>
                   </tr>
@@ -237,8 +237,8 @@ export default function Kizamu() {
                     const through = n.fwd === INF || n.bwd === INF ? INF : n.fwd + n.bwd;
                     return (
                       <tr key={n.id} style={{ fontWeight: on ? 600 : 400 }}>
-                        <td>{n.surface}</td>
-                        <td>{n.unknown ? "未知語" : n.token.posId >= 0 ? posName(lattice, n) : "—"}</td>
+                        <td className="tight">{n.surface}</td>
+                        <td className="tight">{n.unknown ? "未知語" : n.token.posId >= 0 ? posName(lattice, n) : "—"}</td>
                         <td className="num">{n.token.cost.toLocaleString("ja-JP")}</td>
                         <td className="num">{n.token.lc}</td>
                         <td className="num">{n.token.rc}</td>

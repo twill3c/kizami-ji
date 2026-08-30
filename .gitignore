@@ -9,3 +9,6 @@ data/build/
 public/dict/
 tsconfig.tsbuildinfo
 build/shots/
+
+.vercel
+.env*

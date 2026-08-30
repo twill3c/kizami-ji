@@ -80,15 +80,15 @@ export default function Kinsa() {
       <div className="scroll">
         <table>
           <thead>
-            <tr><th>切った側</th><th>繋げた側</th><th>出どころ</th></tr>
+            <tr><th className="tight">切った側</th><th className="tight">繋げた側</th><th>出どころ</th></tr>
           </thead>
           <tbody>
             {stats.ties.map((t, i) => (
               <tr key={`${t.left}-${t.right}-${i}`}>
-                <td style={{ fontFamily: "var(--serif)" }}>
+                <td className="tight" style={{ fontFamily: "var(--serif)" }}>
                   {t.left} <span style={{ color: "var(--shu)" }}>|</span> {t.right}
                 </td>
-                <td style={{ fontFamily: "var(--serif)" }}>{t.joined}</td>
+                <td className="tight" style={{ fontFamily: "var(--serif)" }}>{t.joined}</td>
                 <td className="meter">{t.text.length > 40 ? `${t.text.slice(0, 40)}…` : t.text}</td>
               </tr>
             ))}
