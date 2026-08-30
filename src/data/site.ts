@@ -9,7 +9,7 @@ export const SITE = {
 export const FOOTER = {
   license: "https://github.com/twill3c/kizami-ji/blob/main/LICENSE",
   repository: "https://github.com/twill3c/kizami-ji",
-  guide: "https://github.com/twill3c/kizami-ji#readme",
+  guide: "https://claude.ai/code/artifact/1815e01b-c49e-4265-a468-ffa25c1cc04b",
   blueprint: "https://claude.ai/code/artifact/7ebd7edd-57fc-49e7-b2dd-3203e89b31ef",
   appMenu: "https://app-menu-amber.vercel.app/",
 };
