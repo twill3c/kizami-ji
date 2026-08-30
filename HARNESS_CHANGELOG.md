@@ -55,9 +55,9 @@
 | 起票日 | 2026-08-31 |
 | トリガー | `TOOL-MISUSE` × 2(loop_002 fugashi の引数分割 / loop_009 コミット種別 `perf:`) |
 | 診断 | どちらも**道具が受け付ける語彙を確かめずに使った**。とくに後者は害が大きい ── `looplog append` が `kind=perf` を拒否したのに、そのまま `loop_end` を記録してしまい、**LL-09 で追記できなくなって監査証跡に穴が空いた**(該当コミット d0868aa)。追記専用ログでは、拒否は「あとで直せる失敗」ではない |
-| 改訂 | **`looplog append` が拒否されたら、その場で直すまで次へ進まない。** とくに `loop_end` の前に、そのループで記録するつもりだった行がすべて入っているかを確かめる。コミット種別は AGENTS.md の規約(feat/fix/test/docs/refactor/chore、拡張 data/spec)から出ない ── `perf` は Conventional Commits にはあるが、この規約には無い |
+| 改訂 | **`looplog append` が拒否されたら、その場で直すまで次へ進まない。** `loop_end` を書く前に (a) そのループで記録するつもりだった行がすべて入っているか (b) **`failure_count` を実際に数えたか**(`correction` で無効化した行は数えない)を確かめる。コミット種別は AGENTS.md の規約(feat/fix/test/docs/refactor/chore、拡張 data/spec)から出ない ── `perf` は Conventional Commits にはあるが、この規約には無い |
 | 種別 | agents_md(候補)/ 本ループでは project-owned |
-| 効果検証 | loop_010 以降、各ループの `loop_end` 直前に記録の欠落が無いことを確かめる。TOOL-MISUSE の再発 0 件で Closed |
+| 効果検証 | loop_010 以降、各ループの `loop_end` 直前に記録の欠落と件数のずれが無いことを確かめる。**起票した直後の loop_009 で、今度は `failure_count` を数えずに書いて validate を落とした** ── 同じ型の二度目。TOOL-MISUSE の再発 0 件で Closed |
 | propagation | kizami-ji ✅ / フリート昇格は未判断 |
 | 状態 | Open |
 
