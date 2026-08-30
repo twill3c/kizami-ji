@@ -5,9 +5,13 @@
  * **参照実装(MeCab / fugashi / scripts/ 配下)を一切参照しない**(SPEC O-2)。
  *
  * ファイルは全てリトルエンディアン。読み込み時に実行環境の並びを確かめる。
+ *
+ * 形式 2 では**導出できるものを配らない**。表層の絶対位置とトークンの開始位置は、
+ * 長さの列(`surf_len` / `tok_count`)から読み込み時に累積和で作る。
+ * 単調増加の u32 列は圧縮が効かず、本番では Brotli が gzip に負けていた(loop_007 実測)。
  */
 
-export const FORMAT = 1;
+export const FORMAT = 2;
 
 export interface DictSource {
   /** ファイル名を渡すと中身を返す。ブラウザでは fetch、Node では fs。 */
@@ -64,6 +68,7 @@ export class Dict {
   private readonly sidx: Uint32Array;
   private readonly tokStart: Uint32Array;
   private readonly tokCount: Uint8Array;
+  private readonly surfLen: Uint8Array;
   private readonly tokLc: Uint16Array;
   private readonly tokRc: Uint16Array;
   private readonly tokCost: Int16Array;
@@ -82,9 +87,10 @@ export class Dict {
     if (meta.format !== FORMAT) throw new Error(`辞書形式の版が違う: ${meta.format} != ${FORMAT}`);
     this.meta = meta;
     this.surf = files["surf.bin"]!;
-    this.sidx = view(files["surf_idx.bin"]!, Uint32Array);
-    this.tokStart = view(files["tok_start.bin"]!, Uint32Array);
+    this.surfLen = files["surf_len.bin"]!;
     this.tokCount = files["tok_count.bin"]!;
+    this.sidx = prefixSum(this.surfLen);
+    this.tokStart = prefixSum(this.tokCount);
     this.tokLc = view(files["tok_lc.bin"]!, Uint16Array);
     this.tokRc = view(files["tok_rc.bin"]!, Uint16Array);
     this.tokCost = view(files["tok_cost.bin"]!, Int16Array);
@@ -106,6 +112,15 @@ export class Dict {
     }
     if (this.tokenCount !== meta.token_count) {
       throw new Error(`トークン数が meta と合わない: ${this.tokenCount} != ${meta.token_count}`);
+    }
+    // 累積和が実体と合うこと。合わなければ長さの列が壊れている
+    if (this.sidx[this.sidx.length - 1] !== this.surf.length) {
+      throw new Error(
+        `surf_len の総和が surf.bin の長さと合わない: ${this.sidx[this.sidx.length - 1]} != ${this.surf.length}`,
+      );
+    }
+    if (this.tokStart[this.tokStart.length - 1] !== this.tokenCount) {
+      throw new Error("tok_count の総和が token 数と合わない");
     }
   }
 
@@ -248,8 +263,7 @@ export class Dict {
 
 export const FILES = [
   "surf.bin",
-  "surf_idx.bin",
-  "tok_start.bin",
+  "surf_len.bin",
   "tok_count.bin",
   "tok_lc.bin",
   "tok_rc.bin",
@@ -259,6 +273,17 @@ export const FILES = [
   "matrix.bin",
   "chars.bin",
 ] as const;
+
+/** 長さの列から絶対位置の列を作る(末尾に総和を置く)。 */
+function prefixSum(lengths: Uint8Array): Uint32Array {
+  const out = new Uint32Array(lengths.length + 1);
+  let run = 0;
+  for (let i = 0; i < lengths.length; i++) {
+    run += lengths[i];
+    out[i + 1] = run;
+  }
+  return out;
+}
 
 /** UTF-8 の先頭バイトから文字のバイト数を返す。 */
 export function charLen(b: number): number {

@@ -5,6 +5,9 @@ data/dict/ に置かれたファイルだけで解析が成立することが、
 TypeScript の出荷実装はこのモジュールと同じ形式を読む(loop_003)。
 
 形式は scripts/build_dict.py が書き出す。meta.json の `format` が版。
+
+形式 2 では**導出できるものを配らない**。表層の絶対位置とトークンの開始位置は、
+長さの列(`surf_len` / `tok_count`)から読み込み時に作る。
 """
 
 from __future__ import annotations
@@ -14,7 +17,7 @@ import json
 import os
 from dataclasses import dataclass
 
-FORMAT = 1
+FORMAT = 2
 
 
 @dataclass(frozen=True)
@@ -166,6 +169,16 @@ class ShipDict:
         )
 
 
+def _prefix(lengths):
+    """長さの列から絶対位置の列を作る(末尾に総和を置く)。"""
+    out = [0] * (len(lengths) + 1)
+    run = 0
+    for i, v in enumerate(lengths):
+        run += v
+        out[i + 1] = run
+    return out
+
+
 def _read(path, typecode):
     a = array.array(typecode)
     with open(path, "rb") as f:
@@ -184,10 +197,13 @@ def load(dictdir: str) -> ShipDict:
         raise SystemExit(f"辞書形式の版が違う: {meta['format']} != {FORMAT}")
     j = lambda n: os.path.join(dictdir, n)  # noqa: E731
     surf = open(j("surf.bin"), "rb").read()
-    sidx = _read(j("surf_idx.bin"), "I")
+    # 絶対位置は配られていない。長さの列から累積和で作る
+    slen = _read(j("surf_len.bin"), "B")
+    sidx = array.array("I", _prefix(slen))
+    tcount = _read(j("tok_count.bin"), "B")
     tok = (
-        _read(j("tok_start.bin"), "I"),
-        _read(j("tok_count.bin"), "B"),
+        array.array("I", _prefix(tcount)),
+        tcount,
         _read(j("tok_lc.bin"), "H"),
         _read(j("tok_rc.bin"), "H"),
         _read(j("tok_cost.bin"), "h"),
@@ -198,4 +214,8 @@ def load(dictdir: str) -> ShipDict:
     ch = _read(j("chars.bin"), "I")
     half = len(ch) // 2
     chars = (ch[:half], ch[half:])
+    if sidx[-1] != len(surf):
+        raise SystemExit(f"surf_len の総和が surf.bin の長さと合わない: {sidx[-1]} != {len(surf)}")
+    if tok[0][-1] != len(tok[2]):
+        raise SystemExit("tok_count の総和が token 数と合わない")
     return ShipDict(meta, surf, sidx, tok, matrix, chars)

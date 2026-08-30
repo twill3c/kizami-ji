@@ -84,7 +84,7 @@ export default function Kizamu() {
             {busy ? "解析中…" : "刻む"}
           </button>
           {analyzer === null ? (
-            <span className="meter">{progress || "初回は辞書を読み込む(12.9 MB・圧縮転送)"}</span>
+            <span className="meter">{progress || "初回は辞書を読み込む(圧縮転送で 3.5 MB ほど)"}</span>
           ) : (
             <span className="meter">
               辞書は読み込み済み ── <b>{(bytes / 1048576).toFixed(2)} MB</b> を受け取った(実測)

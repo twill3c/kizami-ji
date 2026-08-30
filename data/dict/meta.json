@@ -1,5 +1,5 @@
 {
- "format": 1,
+ "format": 2,
  "dict": "mecab-ipadic-2.7.0-20070801",
  "surface_count": 325871,
  "token_count": 392126,

@@ -1,0 +1,1 @@
+{"v": "1.2", "ts": "2026-08-31T00:31:30+09:00", "project": "kizami-ji", "loop_id": "loop_008", "event": "loop_start", "data": {"goal": "辞書形式 v2。tok_start(tok_count の累積和)を配るのをやめ、surf_idx(u32 絶対値)を surf_len(u8 差分)に置き換える。冗長分を落として転送量を下げる", "spec_refs": ["N-04", "G-03", "T-001", "T-002", "T-003", "T-004", "T-014"], "scaffold_version": "1.13.0", "agent": "claude-opus-5"}}

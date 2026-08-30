@@ -6,6 +6,14 @@
 捨てるもの: double-array(索引)と feature 文字列のうち読み・発音・原形。
 残すもの  : 表層・生起コスト・左右文脈 ID・品詞四つ組・活用型/活用形・連接表・文字種・未知語。
 
+形式 2 で**冗長な二つを落とした**(本番で Brotli が gzip より大きく出たのを追ったら見つかった):
+
+- `tok_start.bin`(u32 の絶対位置)は `tok_count` の**累積和にすぎない**。配らずに読み込み側で作る
+- `surf_idx.bin`(u32 の絶対位置)を `surf_len.bin`(u8 の長さ)に置き換える。
+  単調増加の u32 列は圧縮が効かないが、長さの列なら小さい整数に収まる(最大 78)
+
+生 12.89 MB → 10.71 MB。
+
     python scripts/build_dict.py [--out data/dict]
 """
 
@@ -18,7 +26,7 @@ import os
 import struct
 import sys
 
-FORMAT = 1
+FORMAT = 2
 
 
 def read_dic(path):
@@ -96,6 +104,12 @@ def main():
         os.path.abspath(__file__))), "data", "dict"))
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
+    # 形式が変わったので、前の版の置き土産を残さない
+    for stale in ("surf_idx.bin", "tok_start.bin"):
+        q = os.path.join(args.out, stale)
+        if os.path.exists(q):
+            os.remove(q)
+            print(f"  形式 {FORMAT} では配らない: {stale} を削除")
 
     sysd = read_dic(os.path.join(args.dicdir, "sys.dic"))
     unkd = read_dic(os.path.join(args.dicdir, "unk.dic"))
@@ -129,13 +143,15 @@ def main():
     # ---- 表層を整列して列指向に書き出す
     entries.sort(key=lambda e: e[0])
     surf_blob = bytearray()
-    surf_idx = [0]
-    tok_start, tok_count = [], []
+    surf_len = []
+    tok_count = []
     lc_a, rc_a, cost_a, pos_a, cf_a = [], [], [], [], []
     for surf, ti, nt in entries:
         surf_blob += surf
-        surf_idx.append(len(surf_blob))
-        tok_start.append(len(lc_a))
+        # 長さは u8 に収める。収まらない辞書が来たら黙って壊れるより落ちるほうがよい(HC-003)
+        if len(surf) > 255:
+            raise SystemExit(f"表層が 255 バイトを超える: {surf[:40]!r}({len(surf)} バイト)")
+        surf_len.append(len(surf))
         tok_count.append(nt)
         for k in range(nt):
             lc, rc, wc = token_fields(sysd, ti + k)
@@ -208,8 +224,7 @@ def main():
     with open(j("surf.bin"), "wb") as f:
         f.write(surf_blob)
     sizes["surf.bin"] = os.path.getsize(j("surf.bin"))
-    sizes["surf_idx.bin"] = write_array(j("surf_idx.bin"), "I", surf_idx)
-    sizes["tok_start.bin"] = write_array(j("tok_start.bin"), "I", tok_start)
+    sizes["surf_len.bin"] = write_array(j("surf_len.bin"), "B", surf_len)
     sizes["tok_count.bin"] = write_array(j("tok_count.bin"), "B", tok_count)
     sizes["tok_lc.bin"] = write_array(j("tok_lc.bin"), "H", lc_a)
     sizes["tok_rc.bin"] = write_array(j("tok_rc.bin"), "H", rc_a)
@@ -218,6 +233,12 @@ def main():
     sizes["tok_cf.bin"] = write_array(j("tok_cf.bin"), "H", cf_a)
     sizes["matrix.bin"] = write_array(j("matrix.bin"), "h", matrix)
     sizes["chars.bin"] = write_array(j("chars.bin"), "I", starts + infos)
+
+    # 落とした二つが本当に導出できることを、書き出す前に検算する(HC-003)
+    if sum(surf_len) != len(surf_blob):
+        raise SystemExit("surf_len の総和が surf.bin の長さと合わない")
+    if sum(tok_count) != len(lc_a):
+        raise SystemExit("tok_count の総和が token 数と合わない")
 
     meta = {
         "format": FORMAT,
