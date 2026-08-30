@@ -11,7 +11,8 @@ const b = await chromium.launch();
 const ctx = await b.newContext({ ...devices["iPhone 13"] });
 const page = await ctx.newPage();
 let bad = 0;
-for (const [name, p] of [["top","/"],["kizamu","/kizamu/"],["kinsa","/kinsa/"],["houhou","/houhou/"]]) {
+for (const [name, p] of [["top","/"],["kizamu","/kizamu/"],["kinsa","/kinsa/"],
+                        ["yaseta","/yaseta/"],["houhou","/houhou/"]]) {
   await page.goto(base + p, { waitUntil: "networkidle" });
   if (p === "/kizamu/") {
     await page.getByRole("button", { name: "刻む", exact: true }).click();

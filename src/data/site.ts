@@ -18,6 +18,7 @@ export const NAV = [
   { href: "/", label: "刻み路" },
   { href: "/kizamu/", label: "刻む" },
   { href: "/kinsa/", label: "僅差の文" },
+  { href: "/yaseta/", label: "痩せた辞書" },
   { href: "/houhou/", label: "方法と限界" },
 ];
 

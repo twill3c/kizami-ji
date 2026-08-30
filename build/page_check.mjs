@@ -130,6 +130,10 @@ const footerLinks = await page.locator(".site-footer a").allTextContents();
 if (footerLinks.length !== 5) fail(`フッタのリンクが ${footerLinks.length} 本(規約は 5)`);
 else ok(`フッタ 5 項目: ${footerLinks.join(" / ")}`);
 
+const nav = await page.locator(".masthead nav a").allTextContents();
+if (nav.length !== 5) fail(`ナビが ${nav.length} 本(トップ + 4 ページ)`);
+else ok(`ナビ: ${nav.join(" / ")}`);
+
 // ---------------------------------------------------------------- 静的な 3 ページ
 //
 // 「刻む」以外のページは辞書を 1 バイトも読まない(F-06 / N-05)。
@@ -138,6 +142,7 @@ else ok(`フッタ 5 項目: ${footerLinks.join(" / ")}`);
 for (const [pathname, mustHave] of [
   ["/", "最小経路"],
   ["/kinsa/", "完全同点"],
+  ["/yaseta/", "語数ではなく"],
   ["/houhou/", "交絡"],
 ]) {
   seen.length = 0;
@@ -208,7 +213,8 @@ else ok("外部への通信 0 件");
 // 目視検品用の画面。図が読めるかどうかは自動化しないと決めてある(HC-041)ので、
 // 撮って人が見る。撮影に失敗したら落とす —— 取れていない画面を「撮りました」と言わせない
 for (const [name, pathname] of [
-  ["kizamu", null], ["top", "/"], ["kinsa", "/kinsa/"], ["houhou", "/houhou/"],
+  ["kizamu", null], ["top", "/"], ["kinsa", "/kinsa/"],
+  ["yaseta", "/yaseta/"], ["houhou", "/houhou/"],
 ]) {
   if (pathname !== null) await page.goto(`${base}${pathname}`, { waitUntil: "networkidle" });
   const shot = `build/shots/${name}.png`;
